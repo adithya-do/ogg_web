@@ -1,0 +1,32 @@
+# /opt/ogg_web/config/ogg_local.yaml
+# Single-server, multi-home configuration
+
+homes:
+  # --- Home 1 (example: GoldenGate 19c Classic) ---
+  - name: OGG19
+    gg_home: /u01/app/ogg/19.1.0
+    oracle_home: /u01/app/oracle/product/19.3.0/dbhome_1
+    # If omitted, app uses <oracle_home>/network/admin
+    tns_admin: /u01/app/oracle/product/19.3.0/dbhome_1/network/admin
+
+    # For display/your reference only
+    db_name: PRODDB
+    # Preferred way to DBLOGIN for ADD TRANDATA
+    useridalias: OGG_PRODDB
+
+    # Optional: extra PATH entries before existing PATH
+    path_extra: /usr/bin
+
+    # If true, app will run "info <proc>" to fetch Lag/Since (slower)
+    show_lag: true
+
+  # --- Home 2 (example: GoldenGate 21c Classic) ---
+  - name: OGG21
+    gg_home: /u01/app/ogg/21.8.0
+    oracle_home: /u01/app/oracle/product/19.3.0/dbhome_1
+    tns_admin: /u01/app/oracle/product/19.3.0/dbhome_1/network/admin
+
+    db_name: PRODDB
+    useridalias: OGG_PRODDB
+    path_extra: /usr/bin
+    show_lag: false
