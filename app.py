@@ -175,44 +175,44 @@ def _augment_lag(home: Dict[str, Any], procs: List[Dict[str, Any]], timeout: int
 # ------------------------------
 # UI (single page)
 # ------------------------------
-INDEX_HTML = f"""
+INDEX_HTML_TMPL = """
 <!doctype html>
 <html lang=\"en\">
 <head>
   <meta charset=\"utf-8\"/>
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>{APP_TITLE}</title>
+  <title>__TITLE__</title>
   <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans'; margin:0; background:#0b1020; color:#e6eefc; }}
-    header {{ padding:12px 16px; background:#0e1530; border-bottom:1px solid #1d2a52; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:10; }}
-    .tag {{ background:#12214a; color:#9ec5ff; padding:4px 8px; border-radius:999px; font-size:12px; }}
-    .container {{ padding: 16px; }}
-    .grid {{ display:grid; grid-template-columns: 280px 1fr; gap:16px; }}
-    .card {{ background:#101833; border:1px solid #1a2750; border-radius:14px; box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset; }}
-    .card h3 {{ margin:0; padding:12px 14px; border-bottom:1px solid #1a2750; font-size:16px; color:#cfe2ff; }}
-    .scroll {{ max-height: 70vh; overflow:auto; }}
-    .home {{ padding:10px 12px; border-bottom:1px dashed #1a2750; cursor:pointer; }}
-    .home:hover {{ background:#0f1730; }}
-    table {{ width:100%; border-collapse: collapse; }}
-    th, td {{ padding:8px 10px; border-bottom:1px solid #1a2750; font-size:14px; }}
-    th {{ text-align:left; color:#9ec5ff; position:sticky; top:0; background:#101833; }}
-    .ok {{ color:#47d147; font-weight:600; }}
-    .warn {{ color:#ffd24d; font-weight:600; }}
-    .bad {{ color:#ff6b6b; font-weight:700; }}
-    .btn {{ background:#172552; color:#cfe2ff; border:1px solid #243a7a; padding:6px 10px; border-radius:10px; cursor:pointer; font-size:12px; }}
-    .btn:hover {{ background:#1a2a5c; }}
-    .btn.red {{ background:#4f1420; border-color:#7a2436; }}
-    .btn.green {{ background:#0f3a26; border-color:#1a6b49; }}
-    .toolbar {{ display:flex; gap:8px; margin-bottom:10px; align-items:center; }}
-    .muted {{ color:#94a3b8; font-size:12px; }}
-    textarea {{ width:100%; height: 50vh; background:#0a132c; color:#e6eefc; border:1px solid #1a2750; border-radius:12px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; }}
-    .row-actions button {{ margin-right:6px; }}
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans'; margin:0; background:#0b1020; color:#e6eefc; }
+    header { padding:12px 16px; background:#0e1530; border-bottom:1px solid #1d2a52; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:10; }
+    .tag { background:#12214a; color:#9ec5ff; padding:4px 8px; border-radius:999px; font-size:12px; }
+    .container { padding: 16px; }
+    .grid { display:grid; grid-template-columns: 280px 1fr; gap:16px; }
+    .card { background:#101833; border:1px solid #1a2750; border-radius:14px; box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset; }
+    .card h3 { margin:0; padding:12px 14px; border-bottom:1px solid #1a2750; font-size:16px; color:#cfe2ff; }
+    .scroll { max-height: 70vh; overflow:auto; }
+    .home { padding:10px 12px; border-bottom:1px dashed #1a2750; cursor:pointer; }
+    .home:hover { background:#0f1730; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding:8px 10px; border-bottom:1px solid #1a2750; font-size:14px; }
+    th { text-align:left; color:#9ec5ff; position:sticky; top:0; background:#101833; }
+    .ok { color:#47d147; font-weight:600; }
+    .warn { color:#ffd24d; font-weight:600; }
+    .bad { color:#ff6b6b; font-weight:700; }
+    .btn { background:#172552; color:#cfe2ff; border:1px solid #243a7a; padding:6px 10px; border-radius:10px; cursor:pointer; font-size:12px; }
+    .btn:hover { background:#1a2a5c; }
+    .btn.red { background:#4f1420; border-color:#7a2436; }
+    .btn.green { background:#0f3a26; border-color:#1a6b49; }
+    .toolbar { display:flex; gap:8px; margin-bottom:10px; align-items:center; }
+    .muted { color:#94a3b8; font-size:12px; }
+    textarea { width:100%; height: 50vh; background:#0a132c; color:#e6eefc; border:1px solid #1a2750; border-radius:12px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; }
+    .row-actions button { margin-right:6px; }
   </style>
 </head>
 <body>
 <header>
-  <div style=\"font-weight:700\">{APP_TITLE}</div>
-  <div class=\"tag\">Refresh: {POLL_SECONDS}s</div>
+  <div style=\"font-weight:700\">__TITLE__</div>
+  <div class=\"tag\">Refresh: __POLL__s</div>
 </header>
 <div class=\"container\">
   <div class=\"grid\">
@@ -260,13 +260,13 @@ async function refreshNow() {
 
 function renderStatus(data) {
   const area = document.getElementById('statusArea');
-  if (data.error) { area.innerHTML = `<div class="bad">${data.error}</div>`; return; }
+  if (data.error) { area.innerHTML = `<div class=\"bad\">${data.error}</div>`; return; }
   const mgrCls = (data.manager === 'RUNNING') ? 'ok' : 'bad';
   let html = '';
-  html += `<div style="margin-bottom:10px">Manager: <span class="${mgrCls}">${data.manager || 'UNKNOWN'}</span>
-    <span class="row-actions">
-      <button class="btn green" onclick="doAction('mgr','start')">Start MGR</button>
-      <button class="btn red" onclick="doAction('mgr','stop')">Stop MGR</button>
+  html += `<div style=\"margin-bottom:10px\">Manager: <span class=\"${mgrCls}\">${data.manager || 'UNKNOWN'}</span>
+    <span class=\"row-actions\">
+      <button class=\"btn green\" onclick=\"doAction('mgr','start')\">Start MGR</button>
+      <button class=\"btn red\" onclick=\"doAction('mgr','stop')\">Stop MGR</button>
     </span>
   </div>`;
   html += `<table>
@@ -276,26 +276,26 @@ function renderStatus(data) {
     html += `<tr>
       <td>${p.type}</td>
       <td><code>${p.name}</code></td>
-      <td class="${cls}">${p.status}</td>
+      <td class=\"${cls}\">${p.status}</td>
       <td>${p.lag || ''}</td>
       <td>${p.since || ''}</td>
       <td>
-        <button class="btn green" onclick="doAction('${p.type.toLowerCase()}','start','${p.name}')">Start</button>
-        <button class="btn" onclick="doAction('${p.type.toLowerCase()}','stop','${p.name}')">Stop</button>
-        <button class="btn red" onclick="doAction('${p.type.toLowerCase()}','kill','${p.name}')">Kill</button>
-        <button class="btn" onclick="openParams('${p.name}')">Params</button>
+        <button class=\"btn green\" onclick=\"doAction('${p.type.toLowerCase()}','start','${p.name}')\">Start</button>
+        <button class=\"btn\" onclick=\"doAction('${p.type.toLowerCase()}','stop','${p.name}')\">Stop</button>
+        <button class=\"btn red\" onclick=\"doAction('${p.type.toLowerCase()}','kill','${p.name}')\">Kill</button>
+        <button class=\"btn\" onclick=\"openParams('${p.name}')\">Params</button>
       </td>
     </tr>`
   });
   html += `</tbody></table>`;
 
-  html += `<div style="margin-top:12px; padding-top:12px; border-top:1px dashed #1a2750">
-    <div style="font-weight:600; margin-bottom:6px">ADD TRANDATA</div>
-    <input id="obj" placeholder="SCHEMA.TABLE" style="background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:8px;padding:6px"/>
-    <input id="alias" placeholder="useridalias (optional overrides config)" style="background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:8px;padding:6px"/>
-    <button class="btn" onclick="addTranData()">Run</button>
-    <div class="muted">Uses DBLOGIN with useridalias when available.</div>
-    <pre id="trandataOut" style="white-space:pre-wrap"></pre>
+  html += `<div style=\"margin-top:12px; padding-top:12px; border-top:1px dashed #1a2750\">
+    <div style=\"font-weight:600; margin-bottom:6px\">ADD TRANDATA</div>
+    <input id=\"obj\" placeholder=\"SCHEMA.TABLE\" style=\"background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:8px;padding:6px\"/>
+    <input id=\"alias\" placeholder=\"useridalias (optional overrides config)\" style=\"background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:8px;padding:6px\"/>
+    <button class=\"btn\" onclick=\"addTranData()\">Run</button>
+    <div class=\"muted\">Uses DBLOGIN with useridalias when available.</div>
+    <pre id=\"trandataOut\" style=\"white-space:pre-wrap\"></pre>
   </div>`;
 
   area.innerHTML = html;
@@ -307,7 +307,9 @@ async function doAction(targetType, action, targetName=null) {
   if (targetName) payload.target_name = targetName;
   const r = await fetch('/api/control', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
   const data = await r.json();
-  alert((data.ok ? 'OK\n' : 'ERR\n') + (data.output || data.error || ''));
+  alert((data.ok ? 'OK
+' : 'ERR
+') + (data.output || data.error || ''));
   refreshNow();
 }
 
@@ -336,12 +338,14 @@ async function addTranData() {
   document.getElementById('trandataOut').textContent = data.output || data.error || '';
 }
 
-setInterval(() => { if (current) refreshNow(); }, {POLL_SECONDS} * 1000);
+setInterval(() => { if (current) refreshNow(); }, __POLL__ * 1000);
 loadHomes();
 </script>
 </body>
 </html>
 """
+
+INDEX_HTML = INDEX_HTML_TMPL.replace("__TITLE__", APP_TITLE).replace("__POLL__", str(POLL_SECONDS))
 
 # ------------------------------
 # Flask routes
