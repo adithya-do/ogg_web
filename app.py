@@ -236,17 +236,34 @@ INDEX_HTML_TMPL = """
 let current = null; // {home}
 
 async function loadHomes() {
-  const r = await fetch('/api/homes');
-  const data = await r.json();
   const div = document.getElementById('homes');
-  div.innerHTML = '';
-  data.homes.forEach(home => {
-    const hd = document.createElement('div');
-    hd.className = 'home';
-    hd.textContent = `• ${home.name}  —  ${home.gg_home}`;
-    hd.onclick = () => { current = {home: home.name}; refreshNow(); document.getElementById('panelTitle').textContent = `${home.name}`; };
-    div.appendChild(hd);
-  });
+  try {
+    const r = await fetch('/api/homes');
+    const data = await r.json();
+    div.innerHTML = '';
+    if (data.error) {
+      div.innerHTML = `<div class=\"bad\">Config error: ${data.error}<br/><span class=\"muted\">Config path: ${data.config_path || ''}</span></div>`;
+      return;
+    }
+    if (!data.homes || data.homes.length === 0) {
+      div.innerHTML = `<div class=\"warn\">No GoldenGate homes found in config.<br/><span class=\"muted\">Edit ${data.config_path || 'config file'} and add homes.</span></div>`;
+      return;
+    }
+    data.homes.forEach(home => {
+      const hd = document.createElement('div');
+      hd.className = 'home';
+      hd.textContent = `• ${home.name}  —  ${home.gg_home}`;
+      hd.onclick = () => { current = {home: home.name}; refreshNow(); document.getElementById('panelTitle').textContent = `${home.name}`; };
+      div.appendChild(hd);
+    });
+    if (!current && data.homes.length > 0) {
+      current = {home: data.homes[0].name};
+      document.getElementById('panelTitle').textContent = data.homes[0].name;
+      refreshNow();
+    }
+  } catch (e) {
+    div.innerHTML = `<div class=\"bad\">Failed to load homes: ${e}</div>`;
+  }
 }
 
 async function refreshNow() {
@@ -307,9 +324,8 @@ async function doAction(targetType, action, targetName=null) {
   if (targetName) payload.target_name = targetName;
   const r = await fetch('/api/control', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
   const data = await r.json();
-  alert((data.ok ? 'OK
-' : 'ERR
-') + (data.output || data.error || ''));
+  alert((data.ok ? 'OK\n' : 'ERR\n') + (data.output || data.error || ''));
+  refreshNow();
   refreshNow();
 }
 
@@ -356,9 +372,12 @@ def index():
 
 @app.get("/api/homes")
 def list_homes():
-    cfg = load_config()
-    homes = [{"name": h.get("name") or h.get("gg_home"), "gg_home": h.get("gg_home")} for h in cfg["homes"]]
-    return jsonify({"homes": homes})
+    try:
+        cfg = load_config()
+        homes = [{"name": h.get("name") or h.get("gg_home"), "gg_home": h.get("gg_home")} for h in cfg["homes"]]
+        return jsonify({"homes": homes, "config_path": CONFIG_PATH})
+    except Exception as e:
+        return jsonify({"homes": [], "error": str(e), "config_path": CONFIG_PATH})
 
 
 def _find_home(home_name: str) -> Dict[str, Any]:
@@ -497,6 +516,77 @@ def api_add_trandata():
 
     rc, out, err = _run_ggsci(home, cmds, timeout=40)
     return jsonify({"ok": rc == 0, "output": out if out else err})
+
+# ------------------------------
+# Extra endpoints
+# ------------------------------
+
+@app.get("/api/health")
+def api_health():
+    exists = os.path.exists(CONFIG_PATH)
+    info = {"config_path": CONFIG_PATH, "exists": exists}
+    if not exists:
+        info["error"] = "Config file not found"
+        return jsonify(info)
+    try:
+        cfg = load_config()
+        info["homes_count"] = len(cfg.get("homes", []))
+    except Exception as e:
+        info["error"] = str(e)
+    return jsonify(info)
+
+@app.post("/api/control_bulk")
+def api_control_bulk():
+    data = request.get_json(force=True)
+    for k in ("home","type","action"):
+        if not data.get(k):
+            return jsonify({"error": f"Missing field: {k}"}), 400
+    try:
+        home = _find_home(data["home"])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 404
+
+    ptype = data["type"].lower()  # extract | replicat
+    action = data["action"].lower()  # start | stop | kill
+    if ptype not in ("extract","replicat"):
+        return jsonify({"error": "type must be extract or replicat"}), 400
+    if action not in ("start","stop","kill"):
+        return jsonify({"error": "action must be start/stop/kill"}), 400
+
+    # Discover processes
+    rc, out, err = _run_ggsci(home, ["info all"], timeout=40)
+    if rc != 0:
+        return jsonify({"error": err or out or "info all failed"}), 502
+    parsed = _parse_info_all(out)
+    procs = parsed.get("processes", [])
+
+    targets = []
+    for p in procs:
+        if p.get("type","" ).lower() != ptype:
+            continue
+        st = p.get("status")
+        if action == "start" and st != "RUNNING":
+            targets.append(p["name"])
+        elif action == "stop" and st != "STOPPED":
+            targets.append(p["name"])
+        elif action == "kill":
+            targets.append(p["name"])
+
+    if not targets:
+        return jsonify({"ok": True, "output": f"No {ptype} processes matched for action {action}"})
+
+    cmds = []
+    for n in targets:
+        if action == "start":
+            cmds.append(f"start {n}")
+        elif action == "stop":
+            cmds.append(f"stop {n}")
+        else:
+            cmds.append(f"kill {n}")
+
+    to = max(30, 5 * len(cmds))
+    rc2, out2, err2 = _run_ggsci(home, cmds, timeout=to)
+    return jsonify({"ok": rc2 == 0, "output": out2 if out2 else err2})
 
 # ------------------------------
 # Main
