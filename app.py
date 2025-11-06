@@ -6,7 +6,7 @@ OGG Web Monitor & Control — Local-only (same server)
 - Controls: Start/Stop MGR, Start/Stop/Kill extracts/replicats, bulk start/stop
 - Params editor (dirprm/*.prm) with timestamped backups
 - ADD TRANDATA via DBLOGIN (prefers useridalias)
-- Diagnostics: /api/health, /api/debug
+- Diagnostics: /api/health, /api/debug, /api/status_raw
 - Plain fallback at /simple
 Run as the same OS user that owns OGG (e.g., 'oracle').
 """
@@ -136,33 +136,80 @@ def _run_ggsci(home: Dict[str, Any], lines: List[str], timeout: int = 30) -> Tup
         return 124, "", "ggsci command timed out"
 
 # ------------------------------ Parsers ------------------------------
-
 MANAGER_STATUS_RE = re.compile(r"Manager\s+is\s+(RUNNING|DOWN)!?", re.IGNORECASE)
-PROC_LINE_RE = re.compile(
-    r"^(EXTRACT|REPLICAT)\s+(?:(?:\w\w)\s+)?([A-Za-z0-9_\-\.]+)\s+(RUNNING|STOPPED|ABENDED|STARTING|STOPPING|RETRYING)(?:\s+([0-9: \-]+))?",
+
+# Accept broader status set
+STATUS_WORD = r"(RUNNING|STOPPED|ABENDED|STARTING|STOPPING|RETRYING|WAITING|DELAYED)"
+
+# Variant A (name-first):  EXTRACT  EXT1  RUNNING  ...
+PROC_LINE_NAME_FIRST_RE = re.compile(
+    rf"^(EXTRACT|REPLICAT)\s+([A-Za-z0-9_.\-]+)\s+{STATUS_WORD}\b.*$",
     re.IGNORECASE
 )
-LAG_LINE_RE = re.compile(r"Lag\s+at\s+Chkpt\s*:\s*([0-9:]+|[0-9]+\s*seconds|None)", re.IGNORECASE)
+
+# Variant B (status-first):  EXTRACT  RUNNING  EXT1  00:00:00  00:00:05
+PROC_LINE_STATUS_FIRST_RE = re.compile(
+    rf"^(EXTRACT|REPLICAT)\s+{STATUS_WORD}\s+([A-Za-z0-9_.\-]+)"
+    rf"(?:\s+([0-9:]+|[0-9]+\s*seconds|None))?"          # Lag at Chkpt
+    rf"(?:\s+([0-9:]+|[0-9]+\s*seconds|None))?",         # Time Since Chkpt
+    re.IGNORECASE
+)
+
+LAG_LINE_RE   = re.compile(r"Lag\s+at\s+Chkpt\s*:\s*([0-9:]+|[0-9]+\s*seconds|None)", re.IGNORECASE)
 SINCE_LINE_RE = re.compile(r"Time\s+Since\s+Chkpt\s*:\s*([0-9:]+|[0-9]+\s*seconds|None)", re.IGNORECASE)
 
 def _parse_info_all(text: str) -> Dict[str, Any]:
+    """
+    Parses both formats:
+      A) 'EXTRACT EXT1 RUNNING ...'
+      B) 'EXTRACT RUNNING EXT1 00:00:00 00:00:05'
+    Also captures 'Manager is RUNNING/DOWN' lines.
+    """
     lines = [ln.rstrip() for ln in text.splitlines()]
     manager = None
     procs: List[Dict[str, Any]] = []
+
     for ln in lines:
+        if not ln.strip():
+            continue
+
+        # Manager line
         m = MANAGER_STATUS_RE.search(ln)
         if m:
             manager = m.group(1).upper()
             continue
-        p = PROC_LINE_RE.match(ln.strip())
-        if p:
-            procs.append({
-                "type": p.group(1).upper(),
-                "name": p.group(2),
-                "status": p.group(3).upper(),
-                "lag": None,
-                "since": None,
-            })
+
+        s1 = PROC_LINE_STATUS_FIRST_RE.match(ln)
+        if s1:
+            ptype, status, name = s1.group(1).upper(), s1.group(2).upper(), s1.group(3)
+            lag, since = s1.group(4), s1.group(5)
+            procs.append({"type": ptype, "name": name, "status": status, "lag": lag, "since": since})
+            continue
+
+        s2 = PROC_LINE_NAME_FIRST_RE.match(ln)
+        if s2:
+            ptype, name, status = s2.group(1).upper(), s2.group(2), s2.group(3).upper()
+            procs.append({"type": ptype, "name": name, "status": status, "lag": None, "since": None})
+            continue
+
+        # Last resort: loose split-based parse for odd layouts
+        parts = ln.split()
+        if len(parts) >= 3 and parts[0].upper() in ("EXTRACT","REPLICAT"):
+            ptype = parts[0].upper()
+            # try to find status token among first 4 tokens
+            st_ix = None
+            for i in range(1, min(5, len(parts))):
+                if re.fullmatch(STATUS_WORD, parts[i], flags=re.IGNORECASE):
+                    st_ix = i
+                    break
+            if st_ix is not None:
+                status = parts[st_ix].upper()
+                name = parts[1] if st_ix == 2 else (parts[st_ix+1] if st_ix+1 < len(parts) else "")
+                lag = parts[st_ix+2] if st_ix+2 < len(parts) and re.fullmatch(r"[0-9:]+|[0-9]+\s*seconds|None", parts[st_ix+2], flags=re.IGNORECASE) else None
+                since = parts[st_ix+3] if st_ix+3 < len(parts) and re.fullmatch(r"[0-9:]+|[0-9]+\s*seconds|None", parts[st_ix+3], flags=re.IGNORECASE) else None
+                if name:
+                    procs.append({"type": ptype, "name": name, "status": status, "lag": lag, "since": since})
+
     return {"manager": manager, "processes": procs}
 
 def _augment_lag(home: Dict[str, Any], procs: List[Dict[str, Any]], timeout: int = 20) -> None:
@@ -251,6 +298,18 @@ def api_status():
     if home.get("show_lag"):
         _augment_lag(home, procs, timeout=20)
     return _json_no_cache({"manager": manager, "processes": procs})
+
+@app.get("/api/status_raw")
+def api_status_raw():
+    home_name = request.args.get("home")
+    if not home_name:
+        return Response("home is required\n", mimetype="text/plain", status=400)
+    try:
+        home = _find_home(home_name)
+    except Exception as e:
+        return Response(f"{e}\n", mimetype="text/plain", status=404)
+    rc, out, err = _run_ggsci(home, ["info all"], timeout=40)
+    return Response((out or err or ""), mimetype="text/plain")
 
 @app.post("/api/control")
 def api_control():
