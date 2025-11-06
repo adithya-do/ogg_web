@@ -71,7 +71,7 @@ from flask import Flask, request, jsonify, Response
 import yaml
 
 APP_TITLE = "OGG Web Monitor & Control (Local)"
-CONFIG_PATH = os.environ.get("OGG_WEB_CONFIG", os.path.join(os.path.dirname(__file__), "config", "ogg_local.yaml"))
+CONFIG_PATH = os.environ.get("OGG_WEB_CONFIG", "/opt/oracle/ogg_web/config/ogg_local.yaml")
 LISTEN_HOST = os.environ.get("OGG_WEB_HOST", "0.0.0.0")
 LISTEN_PORT = int(os.environ.get("OGG_WEB_PORT", "5000"))
 POLL_SECONDS = int(os.environ.get("OGG_POLL_SECONDS", "10"))
@@ -287,7 +287,7 @@ function renderStatus(data) {
     </span>
   </div>`;
   html += `<table>
-    <thead><tr><th>Type</th><th>Name</th><th>Status</th><th>Lag</th><th>Since</th><th>Actions</th></tr></thead><tbody>`;
+    <thead><tr><th>Type</th><th>Name</th><th>Status</th><th>Lag</th><th><th>Since</th><th>Actions</th></tr></thead><tbody>`;
   (data.processes || []).forEach(p => {
     const cls = p.status === 'RUNNING' ? 'ok' : (p.status === 'ABENDED' ? 'bad' : 'warn');
     html += `<tr>
@@ -595,6 +595,13 @@ if __name__ == "__main__":
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     print(f"* Starting {APP_TITLE} on http://{LISTEN_HOST}:{LISTEN_PORT}")
     print(f"* Using config: {CONFIG_PATH}")
+    try:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as _f:
+            _head = ''.join(_f.readlines()[:20])
+        print("* Config head (first lines):
+" + _head)
+    except Exception as _e:
+        print(f"* Config read issue: {_e}")
     app.run(host=LISTEN_HOST, port=LISTEN_PORT)
 
 """
