@@ -19,10 +19,9 @@ app.config.update(
     SECRET_KEY = SECRET_KEY,
     SESSION_COOKIE_HTTPONLY = True,
     SESSION_COOKIE_SAMESITE = "Lax",
-    SESSION_COOKIE_SECURE = False  # set True when behind HTTPS
+    SESSION_COOKIE_SECURE = False
 )
 
-# ---------------- Security headers ----------------
 @app.after_request
 def _sec_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
@@ -37,7 +36,7 @@ def _json_no_cache(payload, code=200):
     r.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return r
 
-# ---------------- Users & config files -------------
+# ---------- users/config ----------
 def _read_users() -> Dict[str, Dict[str, Any]]:
     if not os.path.exists(USERS_PATH):
         return {}
@@ -76,7 +75,7 @@ def save_config(cfg: Dict[str, Any]) -> None:
         yaml.safe_dump(cfg, f, sort_keys=False)
     os.replace(tmp, CONFIG_PATH)
 
-# ---------------- Auth helpers --------------------
+# ---------- auth helpers ----------
 def _issue_csrf():
     if not session.get("csrf"):
         session["csrf"] = secrets.token_urlsafe(24)
@@ -120,7 +119,7 @@ def api_admin_required(fn):
     wrap.__name__ = fn.__name__
     return wrap
 
-# ---------------- Discovery & ggsci ---------------
+# ---------- discovery & ggsci ----------
 def discover_homes(max_hits:int=6) -> List[Dict[str, Any]]:
     homes: List[Dict[str, Any]] = []
     for p in os.environ.get("PATH","").split(":"):
@@ -201,7 +200,7 @@ def _run_ggsci(home: Dict[str, Any], lines: List[str], timeout: int = 30) -> Tup
     except subprocess.TimeoutExpired:
         return 124, "", "ggsci command timed out"
 
-# ---------------- Parsers ------------------------
+# ---------- parsers ----------
 MANAGER_STATUS_RE = re.compile(r"Manager\s+is\s+(RUNNING|DOWN)!?", re.IGNORECASE)
 STATUS_WORD = r"(RUNNING|STOPPED|ABENDED|STARTING|STOPPING|RETRYING|WAITING|DELAYED)"
 PROC_LINE_NAME_FIRST_RE = re.compile(
@@ -237,7 +236,6 @@ def _parse_info_all(text: str) -> Dict[str, Any]:
             ptype, name, status = s2.group(1).upper(), s2.group(2), s2.group(3).upper()
             procs.append({"type": ptype, "name": name, "status": status, "lag": None, "since": None})
             continue
-        # loose fallback
         parts = ln.split()
         if len(parts) >= 3 and parts[0].upper() in ("EXTRACT","REPLICAT"):
             ptype = parts[0].upper()
@@ -255,7 +253,6 @@ def _parse_info_all(text: str) -> Dict[str, Any]:
     return {"manager": manager, "processes": procs}
 
 def _augment_lag(home: Dict[str, Any], procs: List[Dict[str, Any]], timeout: int = 20) -> None:
-    """Fill lag/since by calling 'info <proc>' for RUNNING procs lacking values."""
     need = [p for p in procs if p.get("status")=="RUNNING" and (not p.get("lag") or not p.get("since"))]
     for pr in need:
         rc, out, _ = _run_ggsci(home, [f"info {pr['name']}"], timeout=timeout)
@@ -264,17 +261,17 @@ def _augment_lag(home: Dict[str, Any], procs: List[Dict[str, Any]], timeout: int
         pr["lag"] = pr.get("lag") or (lag_m.group(1) if lag_m else None)
         pr["since"] = pr.get("since") or (since_m.group(1) if since_m else None)
 
-# ---------------- Auth routes --------------------
+# ---------- auth routes (white pages) ----------
 LOGIN_HTML = """
 <!doctype html><meta charset="utf-8"><title>Login</title>
 <style>
 :root{--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
-body{margin:0;font-family:system-ui; background:#ffffff; color:var(--fg)}
+body{margin:0;font-family:system-ui;background:#ffffff;color:var(--fg)}
 .card{max-width:380px;margin:12vh auto;background:var(--card);border:1px solid var(--line);border-radius:14px;color:var(--fg);padding:22px;box-shadow:0 8px 20px rgba(0,0,0,.05)}
 h2{margin:0 0 10px 0}
 label{display:block;margin:10px 0 4px 0;color:#374151}
 input{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#ffffff;color:var(--fg)}
-.btn{margin-top:14px;width:100%;padding:10px;border-radius:10px;border:1px solid var(--btnb);background:var(--btn);color:#fff;cursor:pointer}
+.btn{margin-top:14px;width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--btnb);background:var(--btn);color:#fff;cursor:pointer}
 .err{margin-top:8px;color:#b91c1c}
 .small{color:var(--muted);font-size:12px;margin-top:8px}
 </style>
@@ -312,21 +309,23 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# ---------------- Admin UI ----------------------
+# ---------- Admin UI (dark panels) ----------
 ADMIN_HTML = """
 <!doctype html><meta charset='utf-8'/><title>Admin</title>
 <style>
-:root{--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
-body{margin:0;font-family:system-ui;background:#ffffff;color:var(--fg)}
-header{padding:12px 16px;background:#ffffff;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;position:sticky;top:0}
-a{color:#0d6efd}
+:root{
+  --fg:#e6eefc; --muted:#b7c1d9; --line:#1a2750; --card:#0f1530; --btn:#2b5de6; --btnb:#1f45ad;
+}
+body{margin:0;font-family:system-ui;background:#ffffff;color:#111827}
+header{padding:12px 16px;background:#0e1530;color:#e6eefc;border-bottom:1px solid #1d2a52;display:flex;gap:12px;align-items:center;position:sticky;top:0}
+header a{color:#9ec5ff}
 .wrap{max-width:1100px;margin:20px auto;padding:0 12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:16px}
-h3{margin:6px 0 10px 0;color:#111827}
-table{width:100%;border-collapse:collapse}
-th,td{padding:8px 10px;border-bottom:1px solid var(--line)}
-input,select{background:#ffffff;color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px;width:100%}
-.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:8px 10px;border-radius:10px;cursor:pointer}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:16px;color:var(--fg)}
+h3{margin:6px 0 10px 0;color:#cfe2ff}
+table{width:100%;border-collapse:collapse;color:var(--fg)}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);line-height:1.6}
+input,select{background:#0a132c;color:#e6eefc;border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}
+.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:8px 14px;border-radius:10px;cursor:pointer}
 .btn.red{background:#b91c1c;border-color:#991b1b}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 </style>
@@ -468,7 +467,7 @@ def admin_page():
     resp.set_cookie("csrf", _issue_csrf(), httponly=False, samesite="Lax", secure=app.config["SESSION_COOKIE_SECURE"])
     return resp
 
-# ---------------- Admin APIs --------------------
+# ---------- Admin APIs ----------
 @app.get("/api/admin/users/list")
 @api_admin_required
 def api_users_list():
@@ -555,7 +554,7 @@ def api_homes_delete():
     cfg["homes"] = new; save_config(cfg)
     return _json_no_cache({"ok": True})
 
-# ---------------- Monitor APIs (auth) -----------
+# ---------- monitor APIs ----------
 @app.get("/api/homes")
 @api_login_required
 def api_homes():
@@ -589,7 +588,6 @@ def api_status():
     parsed = _parse_info_all(out)
     if manager is None: manager = parsed.get("manager")
     procs = parsed.get("processes", [])
-    # Always try to fill lag/since if missing:
     _augment_lag(home, procs, timeout=20)
 
     return _json_no_cache({
@@ -625,7 +623,6 @@ def api_control():
     action = data["action"].lower()
     name = data.get("target_name")
 
-    # admin-only for mgr
     if target_type == "mgr":
         if session.get("role") != "admin":
             return _json_no_cache({"error":"forbidden (admin only)"}, 403)
@@ -675,7 +672,7 @@ def api_control_bulk():
     to = max(30, 5*len(cmds)); rc2, out2, err2 = _run_ggsci(home, cmds, timeout=to)
     return _json_no_cache({"ok": rc2 == 0, "output": out2 if out2 else err2})
 
-# ---------------- Params APIs & Page ------------
+# ---------- params APIs & page (white) ----------
 @app.get("/api/params")
 @api_login_required
 def api_params_get():
@@ -716,15 +713,15 @@ PARAMS_HTML_TMPL = """
 <style>
 :root{--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
 body{margin:0;font-family:system-ui;background:#ffffff;color:var(--fg)}
-header{padding:12px 16px;background:#ffffff;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
-a{color:#0d6efd}
+header{padding:12px 16px;background:#0e1530;color:#e6eefc;border-bottom:1px solid #1d2a52;display:flex;gap:10px;align-items:center}
+header a{color:#9ec5ff}
 .wrap{max-width:1100px;margin:16px auto;padding:0 12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
 label{color:#111827}
-textarea{width:100%;height:65vh;background:#ffffff;color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace}
-.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:8px 12px;border-radius:10px;cursor:pointer}
+textarea{width:100%;height:65vh;background:#ffffff;color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.5}
+.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:10px 14px;border-radius:10px;cursor:pointer}
 .btn.red{background:#b91c1c;border-color:#991b1b}
-.row{display:flex;gap:8px;margin-top:10px}
+.row{display:flex;gap:10px;margin-top:12px}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 </style>
 <header>
@@ -793,39 +790,46 @@ def params_page():
     except Exception as e:
         return make_response(f"Error: {e}", 500)
 
-# --------------- Main UI (white theme + buttons) --------
+# ---------- Main UI (dark header + dark left pane + spacing + inline last-refresh) ----------
 INDEX_HTML_TMPL = """
 <!doctype html><html lang='en'><head><meta charset='utf-8'/>
 <meta name='viewport' content='width=device-width, initial-scale=1'/>
 <title>__TITLE__</title>
 <style>
-:root{--fg:#111827;--muted:#6b7280;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
+:root{
+  --fg:#111827; --muted:#6b7280; --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+  --line:#e5e7eb; --card:#ffffff; --btn:#0d6efd; --btnb:#0b5ed7;
+  --dark-bg:#0f1530; --dark-fg:#e6eefc; --dark-line:#1a2750;
+}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,'Noto Sans';margin:0;background:#ffffff;color:var(--fg)}
-header{padding:12px 16px;background:#ffffff;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10}
-.tag{background:#eff6ff;color:#1d4ed8;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid #dbeafe}
+header{padding:14px 16px;background:#0e1530;color:#e6eefc;border-bottom:1px solid #1d2a52;display:flex;gap:12px;align-items:center;position:sticky;top:0;z-index:10}
+header a{color:#9ec5ff}
+.tag{background:#12214a;color:#9ec5ff;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid #1d2a52}
 .container{padding:16px}
-.grid{display:grid;grid-template-columns:280px 1fr;gap:16px}
+.grid{display:grid;grid-template-columns:320px 1fr;gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
 .card h3{margin:0;padding:12px 14px;border-bottom:1px solid var(--line);font-size:16px;color:#111827}
+.card.left{background:var(--dark-bg);border-color:var(--dark-line);color:var(--dark-fg)}
+.card.left h3{color:#cfe2ff;border-color:var(--dark-line)}
 .scroll{max-height:70vh;overflow:auto}
-.home{padding:10px 12px;border-bottom:1px dashed var(--line);cursor:pointer}
-.home:hover{background:#f9fafb}
+.home{padding:12px 14px;border-bottom:1px dashed var(--dark-line);cursor:pointer;line-height:1.6}
+.card.left .home:hover{background:#0f1b44}
 table{width:100%;border-collapse:collapse}
-th,td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:14px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.6}
 th{text-align:left;color:#374151;position:sticky;top:0;background:var(--card)}
 .ok{color:var(--ok);font-weight:600}
 .warn{color:var(--warn);font-weight:600}
 .bad{color:var(--bad);font-weight:700}
-.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:6px 10px;border-radius:10px;cursor:pointer;font-size:12px}
+.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:8px 14px;border-radius:10px;cursor:pointer;font-size:13px}
 .btn:hover{filter:brightness(0.95)}
 .btn.red{background:#b91c1c;border-color:#991b1b}
 .btn.green{background:#15803d;border-color:#166534}
-.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;align-items:center;line-height:1.8}
 .muted{color:var(--muted);font-size:12px}
 .err{background:#fef2f2;border:1px solid #fecaca;padding:8px;border-radius:10px;margin:6px 0;white-space:pre-wrap;display:none;color:#7f1d1d}
 a{color:#0d6efd}
 .small{color:var(--muted)}
-code{background:#f3f4f6;border:1px solid var(--line);padding:2px 4px;border-radius:6px}
+code{background:#f3f4f6;border:1px solid var(--line);padding:2px 6px;border-radius:6px}
 </style></head>
 <body>
 <header>
@@ -835,17 +839,16 @@ code{background:#f3f4f6;border:1px solid var(--line);padding:2px 4px;border-radi
 </header>
 <div class="container">
   <div class="grid">
-    <div class="card">
+    <div class="card left">
       <h3>GoldenGate Homes (local)</h3>
       <div id="homes" class="scroll"></div>
       <div id="homesErr" class="err"></div>
     </div>
     <div class="card">
       <h3 id="panelTitle">Status</h3>
-      <div style="padding: 12px">
-        <div class="small" id="paths"></div>
+      <div style="padding: 14px">
+        <div class="small" id="paths" style="line-height:1.8"></div>
 
-        <!-- Top toolbar with requested buttons -->
         <div class="toolbar" id="controlsbar">
           <button class="btn" onclick="refreshNow()">Manual Refresh</button>
           <button class="btn green" onclick="doBulk('extract','start')">Start All Extracts</button>
@@ -856,11 +859,9 @@ code{background:#f3f4f6;border:1px solid var(--line);padding:2px 4px;border-radi
           <button class="btn red" onclick="doBoth('stop')">Stop ALL</button>
         </div>
 
-        <!-- Manager line + admin-only mgr controls -->
-        <div class="toolbar" id="mgrbar"></div>
+        <div class="toolbar" id="mgrbar" style="line-height:1.8"></div>
 
         <div id="statusArea"></div>
-        <div class="small" id="lastRef" style="margin-top:8px">—</div>
       </div>
     </div>
   </div>
@@ -882,7 +883,7 @@ async function loadHomes(){
     if(!list||!list.length){ showHomesErr(`No GoldenGate homes found.`); return; }
     list.forEach(h=>{
       const d=document.createElement('div'); d.className='home';
-      d.textContent=`• ${h.name}`;   // name only
+      d.textContent=`• ${h.name}`;
       d.onclick=()=>{ current={home:h.name}; refreshNow(); document.getElementById('panelTitle').textContent=h.name; };
       div.appendChild(d);
     });
@@ -895,13 +896,13 @@ async function refreshNow(){
   const r=await fetch('/api/status?'+new URLSearchParams(current).toString(),{cache:'no-store'});
   const data=await r.json();
   renderStatus(data);
-  document.getElementById('lastRef').textContent='Last refresh: '+new Date().toLocaleTimeString();
 }
 
 function renderStatus(data){
+  const now = new Date().toLocaleTimeString();
   const paths=document.getElementById('paths');
   if(data.gg_home||data.oracle_home){
-    paths.innerHTML = `<b>GG Home:</b> <code>${data.gg_home||''}</code> &nbsp; | &nbsp; <b>Oracle Home:</b> <code>${data.oracle_home||''}</code>`;
+    paths.innerHTML = `<b>GG Home:</b> <code>${data.gg_home||''}</code> &nbsp; | &nbsp; <b>Oracle Home:</b> <code>${data.oracle_home||''}</code> <span class="small muted" style="margin-left:12px">Last refresh: ${now}</span>`;
   } else { paths.textContent=''; }
 
   const mgrbar=document.getElementById('mgrbar');
@@ -911,7 +912,7 @@ function renderStatus(data){
   mgrSpan.innerHTML = `Manager: <span class="${mgrCls}">${data.manager||'UNKNOWN'}</span>`;
   mgrbar.appendChild(mgrSpan);
   if(IS_ADMIN){
-    const btns=document.createElement('span'); btns.style.marginLeft='10px';
+    const btns=document.createElement('span'); btns.style.marginLeft='12px';
     btns.innerHTML = `
       <button class="btn green" onclick="doAction('mgr','start')">Start MGR</button>
       <button class="btn red" onclick="doAction('mgr','stop')">Stop MGR</button>`;
@@ -943,8 +944,8 @@ function renderStatus(data){
 
   html+=`<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
     <div style="font-weight:600;margin-bottom:6px">ADD TRANDATA</div>
-    <input id="obj" placeholder="SCHEMA.TABLE" style="background:#ffffff;color:#111827;border:1px solid var(--line);border-radius:8px;padding:6px"/>
-    <input id="alias" placeholder="useridalias (optional overrides config)" style="background:#ffffff;color:#111827;border:1px solid var(--line);border-radius:8px;padding:6px"/>
+    <input id="obj" placeholder="SCHEMA.TABLE" style="background:#ffffff;color:#111827;border:1px solid var(--line);border-radius:8px;padding:8px"/>
+    <input id="alias" placeholder="useridalias (optional overrides config)" style="background:#ffffff;color:#111827;border:1px solid var(--line);border-radius:8px;padding:8px"/>
     <button class="btn" onclick="addTranData()">Run</button>
     <div class="small">Uses DBLOGIN with useridalias when available.</div>
     <pre id="trandataOut" style="white-space:pre-wrap"></pre>
@@ -1005,14 +1006,14 @@ def index():
     resp.set_cookie("csrf", _issue_csrf(), httponly=False, samesite="Lax", secure=app.config["SESSION_COOKIE_SECURE"])
     return resp
 
-# simple page (kept but not linked)
+# Keep simple page (not linked)
 SIMPLE_HTML = "<!doctype html><meta charset='utf-8'><pre id='out'>Loading...</pre><script>fetch('/api/homes').then(r=>r.json()).then(d=>{document.getElementById('out').textContent=JSON.stringify(d,null,2)});</script>"
 @app.get("/simple")
 @login_required
 def simple():
     return Response(SIMPLE_HTML, mimetype="text/html")
 
-# ---------------- Main -------------------------
+# ---------- main ----------
 if __name__ == "__main__":
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(USERS_PATH), exist_ok=True)
