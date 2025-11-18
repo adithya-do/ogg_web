@@ -19,7 +19,7 @@ app.config.update(
     SECRET_KEY = SECRET_KEY,
     SESSION_COOKIE_HTTPONLY = True,
     SESSION_COOKIE_SAMESITE = "Lax",
-    SESSION_COOKIE_SECURE = False  # set True if behind HTTPS
+    SESSION_COOKIE_SECURE = False  # set True when behind HTTPS
 )
 
 # ---------------- Security headers ----------------
@@ -154,7 +154,7 @@ def attach_defaults(homes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "tns_admin":   h.get("tns_admin", TNS_ADMIN),
             "db_name":     h.get("db_name", ""),
             "useridalias": h.get("useridalias", ""),
-            "show_lag":    h.get("show_lag", True),  # default True now
+            "show_lag":    h.get("show_lag", True),
         })
     return out
 
@@ -268,14 +268,15 @@ def _augment_lag(home: Dict[str, Any], procs: List[Dict[str, Any]], timeout: int
 LOGIN_HTML = """
 <!doctype html><meta charset="utf-8"><title>Login</title>
 <style>
-body{margin:0;font-family:system-ui;background:linear-gradient(135deg,#0b1020,#0e1840 60%,#10204f);}
-.card{max-width:380px;margin:12vh auto;background:#0f1530cc;border:1px solid #203063;border-radius:16px;color:#e6eefc;padding:22px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+:root{--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
+body{margin:0;font-family:system-ui; background:#ffffff; color:var(--fg)}
+.card{max-width:380px;margin:12vh auto;background:var(--card);border:1px solid var(--line);border-radius:14px;color:var(--fg);padding:22px;box-shadow:0 8px 20px rgba(0,0,0,.05)}
 h2{margin:0 0 10px 0}
-label{display:block;margin:10px 0 4px 0;color:#bcd3ff}
-input{width:100%;padding:10px;border-radius:12px;border:1px solid #23376e;background:#0a132c;color:#e6eefc}
-.btn{margin-top:14px;width:100%;padding:10px;border-radius:12px;border:1px solid #2d4ea8;background:#18306e;color:#e6eefc;cursor:pointer}
-.err{margin-top:8px;color:#ff9696}
-.small{color:#b7c1d9;font-size:12px;margin-top:8px}
+label{display:block;margin:10px 0 4px 0;color:#374151}
+input{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#ffffff;color:var(--fg)}
+.btn{margin-top:14px;width:100%;padding:10px;border-radius:10px;border:1px solid var(--btnb);background:var(--btn);color:#fff;cursor:pointer}
+.err{margin-top:8px;color:#b91c1c}
+.small{color:var(--muted);font-size:12px;margin-top:8px}
 </style>
 <div class="card">
   <h2>Sign in</h2>
@@ -315,17 +316,18 @@ def logout():
 ADMIN_HTML = """
 <!doctype html><meta charset='utf-8'/><title>Admin</title>
 <style>
-body{margin:0;font-family:system-ui;background:linear-gradient(135deg,#0b1020,#0e1840 60%,#10204f);color:#e6eefc}
-header{padding:12px 16px;background:#0e1530;border-bottom:1px solid #1d2a52;display:flex;gap:12px;align-items:center}
-a{color:#9ec5ff}
+:root{--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
+body{margin:0;font-family:system-ui;background:#ffffff;color:var(--fg)}
+header{padding:12px 16px;background:#ffffff;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;position:sticky;top:0}
+a{color:#0d6efd}
 .wrap{max-width:1100px;margin:20px auto;padding:0 12px}
-.card{background:#0f1530cc;border:1px solid #1a2750;border-radius:16px;padding:14px;margin-bottom:16px}
-h3{margin:6px 0 10px 0;color:#cfe2ff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:16px}
+h3{margin:6px 0 10px 0;color:#111827}
 table{width:100%;border-collapse:collapse}
-th,td{padding:8px 10px;border-bottom:1px solid #213264}
-input,select{background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:10px;padding:8px;width:100%}
-.btn{background:#18306e;color:#e6eefc;border:1px solid #2d4ea8;padding:8px 10px;border-radius:10px;cursor:pointer}
-.btn.red{background:#4f1420;border-color:#7a2436}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line)}
+input,select{background:#ffffff;color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px;width:100%}
+.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:8px 10px;border-radius:10px;cursor:pointer}
+.btn.red{background:#b91c1c;border-color:#991b1b}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 </style>
 <header>
@@ -366,7 +368,7 @@ input,select{background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-ra
         <label>TNS Admin (optional)</label><input id="h_tns">
         <label>DB Name (optional)</label><input id="h_db">
         <label>UserID Alias (optional)</label><input id="h_alias">
-        <label>Show Lag (true/false)</label><input id="h_lag" placeholder="true">
+        <label>Show Lag (true/false)</label><input id="h_lag" placeholder="true" value="true">
         <div style="margin-top:8px">
           <button class="btn" onclick="saveHome()">Save</button>
           <button class="btn red" onclick="delHome()">Delete</button>
@@ -590,7 +592,6 @@ def api_status():
     # Always try to fill lag/since if missing:
     _augment_lag(home, procs, timeout=20)
 
-    # include paths for right panel (req #4)
     return _json_no_cache({
         "manager": manager,
         "processes": procs,
@@ -624,7 +625,7 @@ def api_control():
     action = data["action"].lower()
     name = data.get("target_name")
 
-    # (1) Manager control restricted to admin
+    # admin-only for mgr
     if target_type == "mgr":
         if session.get("role") != "admin":
             return _json_no_cache({"error":"forbidden (admin only)"}, 403)
@@ -674,6 +675,7 @@ def api_control_bulk():
     to = max(30, 5*len(cmds)); rc2, out2, err2 = _run_ggsci(home, cmds, timeout=to)
     return _json_no_cache({"ok": rc2 == 0, "output": out2 if out2 else err2})
 
+# ---------------- Params APIs & Page ------------
 @app.get("/api/params")
 @api_login_required
 def api_params_get():
@@ -709,19 +711,19 @@ def api_params_save():
     except Exception as e:
         return _json_no_cache({"ok": False, "error": f"Write error: {e}"}, 502)
 
-# ---------------- Params PAGE (req #6) ----------
 PARAMS_HTML_TMPL = """
 <!doctype html><meta charset='utf-8'><title>Edit Params</title>
 <style>
-body{margin:0;font-family:system-ui;background:linear-gradient(135deg,#0b1020,#0e1840 60%,#10204f);color:#e6eefc}
-header{padding:12px 16px;background:#0e1530;border-bottom:1px solid #1d2a52;display:flex;gap:10px;align-items:center}
-a{color:#9ec5ff}
+:root{--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
+body{margin:0;font-family:system-ui;background:#ffffff;color:var(--fg)}
+header{padding:12px 16px;background:#ffffff;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
+a{color:#0d6efd}
 .wrap{max-width:1100px;margin:16px auto;padding:0 12px}
-.card{background:#0f1530cc;border:1px solid #1a2750;border-radius:16px;padding:14px}
-label{color:#cfe2ff}
-textarea{width:100%;height:65vh;background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:12px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace}
-.btn{background:#18306e;color:#e6eefc;border:1px solid #2d4ea8;padding:8px 12px;border-radius:10px;cursor:pointer}
-.btn.red{background:#4f1420;border-color:#7a2436}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+label{color:#111827}
+textarea{width:100%;height:65vh;background:#ffffff;color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:8px 12px;border-radius:10px;cursor:pointer}
+.btn.red{background:#b91c1c;border-color:#991b1b}
 .row{display:flex;gap:8px;margin-top:10px}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 </style>
@@ -741,7 +743,7 @@ textarea{width:100%;height:65vh;background:#0a132c;color:#e6eefc;border:1px soli
       <button class="btn" onclick="save()">Save</button>
       <button class="btn red" onclick="cancel()">Cancel</button>
     </div>
-    <div id="msg" style="margin-top:10px"></div>
+    <div id="msg" style="margin-top:10px;color:#b91c1c"></div>
   </div>
 </div>
 <script>
@@ -791,38 +793,39 @@ def params_page():
     except Exception as e:
         return make_response(f"Error: {e}", 500)
 
-# --------------- Main UI (header tweaks) --------
+# --------------- Main UI (white theme + buttons) --------
 INDEX_HTML_TMPL = """
 <!doctype html><html lang='en'><head><meta charset='utf-8'/>
 <meta name='viewport' content='width=device-width, initial-scale=1'/>
 <title>__TITLE__</title>
 <style>
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,'Noto Sans';margin:0;
- background:linear-gradient(135deg,#0b1020,#0e1840 60%,#10204f); color:#e6eefc}
-header{padding:12px 16px;background:#0e1530d9;border-bottom:1px solid #1d2a52;display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10}
-.tag{background:#12214a;color:#9ec5ff;padding:4px 8px;border-radius:999px;font-size:12px}
+:root{--fg:#111827;--muted:#6b7280;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--line:#e5e7eb;--card:#ffffff;--btn:#0d6efd;--btnb:#0b5ed7;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,'Noto Sans';margin:0;background:#ffffff;color:var(--fg)}
+header{padding:12px 16px;background:#ffffff;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10}
+.tag{background:#eff6ff;color:#1d4ed8;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid #dbeafe}
 .container{padding:16px}
 .grid{display:grid;grid-template-columns:280px 1fr;gap:16px}
-.card{background:#0f1530cc;border:1px solid #1a2750;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
-.card h3{margin:0;padding:12px 14px;border-bottom:1px solid #1a2750;font-size:16px;color:#cfe2ff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+.card h3{margin:0;padding:12px 14px;border-bottom:1px solid var(--line);font-size:16px;color:#111827}
 .scroll{max-height:70vh;overflow:auto}
-.home{padding:10px 12px;border-bottom:1px dashed #1a2750;cursor:pointer}
-.home:hover{background:#0f1b44}
+.home{padding:10px 12px;border-bottom:1px dashed var(--line);cursor:pointer}
+.home:hover{background:#f9fafb}
 table{width:100%;border-collapse:collapse}
-th,td{padding:8px 10px;border-bottom:1px solid #1a2750;font-size:14px}
-th{text-align:left;color:#9ec5ff;position:sticky;top:0;background:#0f1530cc}
-.ok{color:#47d147;font-weight:600}
-.warn{color:#ffd24d;font-weight:600}
-.bad{color:#ff6b6b;font-weight:700}
-.btn{background:#18306e;color:#e6eefc;border:1px solid #2d4ea8;padding:6px 10px;border-radius:10px;cursor:pointer;font-size:12px}
-.btn:hover{background:#1a3a7a}
-.btn.red{background:#4f1420;border-color:#7a2436}
-.btn.green{background:#0f3a26;border-color:#1a6b49}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:14px}
+th{text-align:left;color:#374151;position:sticky;top:0;background:var(--card)}
+.ok{color:var(--ok);font-weight:600}
+.warn{color:var(--warn);font-weight:600}
+.bad{color:var(--bad);font-weight:700}
+.btn{background:var(--btn);color:#fff;border:1px solid var(--btnb);padding:6px 10px;border-radius:10px;cursor:pointer;font-size:12px}
+.btn:hover{filter:brightness(0.95)}
+.btn.red{background:#b91c1c;border-color:#991b1b}
+.btn.green{background:#15803d;border-color:#166534}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center}
-.muted{color:#b7c1d9;font-size:12px}
-.err{background:#2a1020;border:1px solid #7a2442;padding:8px;border-radius:10px;margin:6px 0;white-space:pre-wrap;display:none}
-a{color:#9ec5ff}
-.small{color:#b7c1d9}
+.muted{color:var(--muted);font-size:12px}
+.err{background:#fef2f2;border:1px solid #fecaca;padding:8px;border-radius:10px;margin:6px 0;white-space:pre-wrap;display:none;color:#7f1d1d}
+a{color:#0d6efd}
+.small{color:var(--muted)}
+code{background:#f3f4f6;border:1px solid var(--line);padding:2px 4px;border-radius:6px}
 </style></head>
 <body>
 <header>
@@ -841,7 +844,21 @@ a{color:#9ec5ff}
       <h3 id="panelTitle">Status</h3>
       <div style="padding: 12px">
         <div class="small" id="paths"></div>
+
+        <!-- Top toolbar with requested buttons -->
+        <div class="toolbar" id="controlsbar">
+          <button class="btn" onclick="refreshNow()">Manual Refresh</button>
+          <button class="btn green" onclick="doBulk('extract','start')">Start All Extracts</button>
+          <button class="btn" onclick="doBulk('extract','stop')">Stop All Extracts</button>
+          <button class="btn green" onclick="doBulk('replicat','start')">Start All Replicats</button>
+          <button class="btn" onclick="doBulk('replicat','stop')">Stop All Replicats</button>
+          <button class="btn green" onclick="doBoth('start')">Start ALL</button>
+          <button class="btn red" onclick="doBoth('stop')">Stop ALL</button>
+        </div>
+
+        <!-- Manager line + admin-only mgr controls -->
         <div class="toolbar" id="mgrbar"></div>
+
         <div id="statusArea"></div>
         <div class="small" id="lastRef" style="margin-top:8px">—</div>
       </div>
@@ -865,7 +882,7 @@ async function loadHomes(){
     if(!list||!list.length){ showHomesErr(`No GoldenGate homes found.`); return; }
     list.forEach(h=>{
       const d=document.createElement('div'); d.className='home';
-      d.textContent=`• ${h.name}`;                   // (4) name only
+      d.textContent=`• ${h.name}`;   // name only
       d.onclick=()=>{ current={home:h.name}; refreshNow(); document.getElementById('panelTitle').textContent=h.name; };
       div.appendChild(d);
     });
@@ -893,7 +910,7 @@ function renderStatus(data){
   const mgrSpan=document.createElement('div');
   mgrSpan.innerHTML = `Manager: <span class="${mgrCls}">${data.manager||'UNKNOWN'}</span>`;
   mgrbar.appendChild(mgrSpan);
-  if(IS_ADMIN){   // (1) admin-only buttons
+  if(IS_ADMIN){
     const btns=document.createElement('span'); btns.style.marginLeft='10px';
     btns.innerHTML = `
       <button class="btn green" onclick="doAction('mgr','start')">Start MGR</button>
@@ -924,10 +941,10 @@ function renderStatus(data){
   });
   html+=`</tbody></table>`;
 
-  html+=`<div style="margin-top:12px;padding-top:12px;border-top:1px dashed #1a2750">
+  html+=`<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)">
     <div style="font-weight:600;margin-bottom:6px">ADD TRANDATA</div>
-    <input id="obj" placeholder="SCHEMA.TABLE" style="background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:8px;padding:6px"/>
-    <input id="alias" placeholder="useridalias (optional overrides config)" style="background:#0a132c;color:#e6eefc;border:1px solid #1a2750;border-radius:8px;padding:6px"/>
+    <input id="obj" placeholder="SCHEMA.TABLE" style="background:#ffffff;color:#111827;border:1px solid var(--line);border-radius:8px;padding:6px"/>
+    <input id="alias" placeholder="useridalias (optional overrides config)" style="background:#ffffff;color:#111827;border:1px solid var(--line);border-radius:8px;padding:6px"/>
     <button class="btn" onclick="addTranData()">Run</button>
     <div class="small">Uses DBLOGIN with useridalias when available.</div>
     <pre id="trandataOut" style="white-space:pre-wrap"></pre>
@@ -943,13 +960,25 @@ async function doAction(targetType,action,targetName=null){
   const d=await r.json(); alert((d.ok?'OK\\n':'ERR\\n')+(d.output||d.error||'')); refreshNow();
 }
 
-async function addTranData(){
+async function doBulk(ptype,action){
   if(!current) return;
-  const obj=document.getElementById('obj').value.trim(); const alias=document.getElementById('alias').value.trim();
-  if(!obj){ alert('Provide SCHEMA.TABLE'); return; }
-  const payload={...current,object:obj}; if(alias) payload.useridalias=alias;
-  const r=await fetch('/api/add_trandata',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf()},body:JSON.stringify(payload)});
-  const d=await r.json(); document.getElementById('trandataOut').textContent=d.output||d.error||'';
+  const payload={home:current.home,type:ptype,action:action};
+  const r=await fetch('/api/control_bulk',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf()},body:JSON.stringify(payload)});
+  const d=await r.json(); alert((d.ok?'OK\\n':'ERR\\n')+(d.output||d.error||'')); refreshNow();
+}
+
+async function doBoth(action){
+  if(!current) return;
+  const headers={'Content-Type':'application/json','X-CSRF-Token':csrf()};
+  const p1={home:current.home,type:'extract',action:action};
+  const p2={home:current.home,type:'replicat',action:action};
+  const r1=await fetch('/api/control_bulk',{method:'POST',headers,body:JSON.stringify(p1)}); const d1=await r1.json();
+  const r2=await fetch('/api/control_bulk',{method:'POST',headers,body:JSON.stringify(p2)}); const d2=await r2.json();
+  const ok=(!!d1.ok)&&(!d1.error)&&(!!d2.ok)&&(!d2.error);
+  const msg1=(d1.ok?'[Extracts] OK':'[Extracts] ERR')+' '+(d1.output||d1.error||'');
+  const msg2=(d2.ok?'[Replicats] OK':'[Replicats] ERR')+' '+(d2.output||d2.error||'');
+  alert((ok?'OK\\n':'Mixed/ERR\\n')+msg1+'\\n'+msg2);
+  refreshNow();
 }
 
 setInterval(()=>{ if(current) refreshNow(); }, __POLL__*1000);
@@ -958,7 +987,6 @@ loadHomes();
 </body></html>
 """
 
-# build HTML with role-based nav
 def _build_index_html():
     nav = '<a href="/logout">Logout</a>'
     if session.get("role") == "admin":
@@ -977,7 +1005,7 @@ def index():
     resp.set_cookie("csrf", _issue_csrf(), httponly=False, samesite="Lax", secure=app.config["SESSION_COOKIE_SECURE"])
     return resp
 
-# simple page removed from nav per request; route left for troubleshooting if bookmarked
+# simple page (kept but not linked)
 SIMPLE_HTML = "<!doctype html><meta charset='utf-8'><pre id='out'>Loading...</pre><script>fetch('/api/homes').then(r=>r.json()).then(d=>{document.getElementById('out').textContent=JSON.stringify(d,null,2)});</script>"
 @app.get("/simple")
 @login_required
