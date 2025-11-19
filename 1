@@ -1,43 +1,33 @@
-def _ssl_context_from_env():
-    """
-    Returns a Flask ssl_context, or None (HTTP).
-    Env:
-      OGG_SSL_CERT=/path/to/cert.crt
-      OGG_SSL_KEY=/path/to/key.key
-      OGG_SSL_SELF_SIGNED=true|false  (optional; auto-generate if true)
-      OGG_SSL_DIR=/opt/oracle/ogg_web/certs  (where to store self-signed)
-      OGG_BEHIND_PROXY=1  (if running behind nginx/ALB; trusts X-Forwarded-Proto)
-    """
-    cert = os.environ.get("OGG_SSL_CERT")
-    key  = os.environ.get("OGG_SSL_KEY")
-    if cert and key and os.path.exists(cert) and os.path.exists(key):
-        return (cert, key)
+if __name__ == "__main__":
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    os.makedirs(os.path.dirname(USERS_PATH), exist_ok=True)
 
-    # Optional self-signed generation
-    if str(os.environ.get("OGG_SSL_SELF_SIGNED", "false")).lower() in ("1","true","yes"):
-        base = os.environ.get("OGG_SSL_DIR", "/opt/oracle/ogg_web/certs")
-        os.makedirs(base, exist_ok=True)
-        cert = os.path.join(base, "server.crt")
-        key  = os.path.join(base, "server.key")
-        if not (os.path.exists(cert) and os.path.exists(key)):
-            # create a quick self-signed cert with openssl
-            host = os.uname().nodename
-            try:
-                subprocess.run(
-                    [
-                        "openssl","req","-x509","-nodes","-newkey","rsa:2048",
-                        "-days","825","-subj", f"/CN={host}",
-                        "-keyout", key, "-out", cert
-                    ],
-                    check=True
-                )
-                try:
-                    os.chmod(key, 0o600)
-                except Exception:
-                    pass
-            except Exception as e:
-                print(f"* Failed to auto-generate self-signed cert: {e}")
-                return None
-        return (cert, key)
+    # If behind a proxy (nginx/ALB) set OGG_BEHIND_PROXY=1
+    if str(os.environ.get("OGG_BEHIND_PROXY", "0")).lower() in ("1","true","yes"):
+        # trust one hop for X-Forwarded-Proto / Host so request.is_secure works
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-    return None
+    ensure_initial_admin()
+
+    ssl_ctx = _ssl_context_from_env()
+    if ssl_ctx:
+        # mark cookies secure when HTTPS is enabled
+        app.config["SESSION_COOKIE_SECURE"] = True
+
+    # security & diagnostics
+    print(f"* {APP_TITLE} {'https' if ssl_ctx else 'http'}://{LISTEN_HOST}:{LISTEN_PORT}")
+    print(f"* Using config: {CONFIG_PATH}")
+    print(f"* Users file : {USERS_PATH}")
+    try:
+        with open(CONFIG_PATH,'r',encoding='utf-8') as f:
+            print('* Config head:\n'+''.join(f.readlines()[:30]))
+    except Exception as e:
+        print(f"* Config read issue: {e}")
+
+    # send HSTS when serving HTTPS (ok if also sent on HTTP)
+    @app.after_request
+    def _hsts(r):
+        r.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        return r
+
+    app.run(host=LISTEN_HOST, port=LISTEN_PORT, ssl_context=ssl_ctx)
