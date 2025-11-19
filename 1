@@ -1,33 +1,140 @@
-if __name__ == "__main__":
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    os.makedirs(os.path.dirname(USERS_PATH), exist_ok=True)
+def _ssl_context_from_env():
+    """
+    Return (cert_path, key_path) for Flask ssl_context or None to keep HTTP.
 
-    # If behind a proxy (nginx/ALB) set OGG_BEHIND_PROXY=1
-    if str(os.environ.get("OGG_BEHIND_PROXY", "0")).lower() in ("1","true","yes"):
-        # trust one hop for X-Forwarded-Proto / Host so request.is_secure works
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+    Env:
+      OGG_SSL_CERT=/path/to/cert.crt
+      OGG_SSL_KEY=/path/to/key.key
+      OGG_SSL_SELF_SIGNED=true|false       # auto-generate if true
+      OGG_SSL_DIR=/opt/oracle/ogg_web/certs
+      OGG_SSL_HOSTNAME=myhost.example.com  # override CN (default: socket.getfqdn())
+      OGG_SSL_SAN="DNS:myhost,IP:10.0.0.5" # extra SAN entries (comma separated)
+    """
+    cert = os.environ.get("OGG_SSL_CERT")
+    key  = os.environ.get("OGG_SSL_KEY")
+    if cert and key and os.path.exists(cert) and os.path.exists(key):
+        return (cert, key)
 
-    ensure_initial_admin()
+    if str(os.environ.get("OGG_SSL_SELF_SIGNED", "false")).lower() not in ("1","true","yes"):
+        return None
 
-    ssl_ctx = _ssl_context_from_env()
-    if ssl_ctx:
-        # mark cookies secure when HTTPS is enabled
-        app.config["SESSION_COOKIE_SECURE"] = True
+    if not shutil.which("openssl"):
+        print("* openssl not found; cannot auto-generate cert. Install openssl or provide OGG_SSL_CERT/KEY.")
+        return None
 
-    # security & diagnostics
-    print(f"* {APP_TITLE} {'https' if ssl_ctx else 'http'}://{LISTEN_HOST}:{LISTEN_PORT}")
-    print(f"* Using config: {CONFIG_PATH}")
-    print(f"* Users file : {USERS_PATH}")
+    base = os.environ.get("OGG_SSL_DIR", "/opt/oracle/ogg_web/certs")
     try:
-        with open(CONFIG_PATH,'r',encoding='utf-8') as f:
-            print('* Config head:\n'+''.join(f.readlines()[:30]))
+        os.makedirs(base, exist_ok=True)
     except Exception as e:
-        print(f"* Config read issue: {e}")
+        print(f"* Failed to create cert directory {base}: {e}")
+        return None
 
-    # send HSTS when serving HTTPS (ok if also sent on HTTP)
-    @app.after_request
-    def _hsts(r):
-        r.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
-        return r
+    cert = os.path.join(base, "server.crt")
+    key  = os.path.join(base, "server.key")
+    conf = os.path.join(base, "openssl.cnf")
 
-    app.run(host=LISTEN_HOST, port=LISTEN_PORT, ssl_context=ssl_ctx)
+    # Build SAN list
+    host = os.environ.get("OGG_SSL_HOSTNAME") or socket.getfqdn()
+    extra_san = (os.environ.get("OGG_SSL_SAN") or "").strip()
+    sans = [f"DNS:{host}", "DNS:localhost", "IP:127.0.0.1"]
+    if extra_san:
+        sans.extend([s.strip() for s in extra_san.split(",") if s.strip()])
+
+    conf_text = f"""[ req ]
+default_bits       = 2048
+distinguished_name = req_distinguished_name
+x509_extensions    = v3_req
+prompt             = no
+default_md         = sha256
+
+[ req_distinguished_name ]
+CN = {host}
+
+[ v3_req ]
+subjectAltName = {", ".join(sans)}
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+"""
+
+    try:
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write(conf_text)
+    except Exception as e:
+        print(f"* Failed to write openssl config: {e}")
+        return None
+
+    # Generate cert only if it doesn't already exist
+    if not (os.path.exists(cert) and os.path.exists(key)):
+        try:
+            subprocess.run(
+                [
+                    "openssl","req","-x509","-nodes","-newkey","rsa:2048",
+                    "-days","825",
+                    "-keyout", key,
+                    "-out",   cert,
+                    "-config", conf,
+                    "-extensions","v3_req"
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            try: os.chmod(key, 0o600)
+            except Exception: pass
+            print(f"* Generated self-signed cert:\n  cert: {cert}\n  key : {key}\n  SAN : {', '.join(sans)}")
+        except subprocess.CalledProcessError as e:
+            print("* OpenSSL failed to generate certificate.")
+            print(e.stderr.decode(errors="ignore"))
+            return None
+        except Exception as e:
+            print(f"* Unexpected error generating certificate: {e}")
+            return None
+
+    return (cert, key)
+
+
+
+
+# as oracle
+export OGG_SSL_SELF_SIGNED=true
+export OGG_SSL_DIR=/opt/oracle/ogg_web/certs
+# Optional but recommended so CN matches what desktops use:
+export OGG_SSL_HOSTNAME=$(hostname -f)
+# Add any extra SANs (comma-separated):
+# export OGG_SSL_SAN="DNS:myalias.local,IP:10.10.1.25"
+
+export OGG_WEB_PORT=8443
+cd /opt/oracle/ogg_web
+python3 app.py
+
+
+
+
+sudo -u oracle mkdir -p /opt/oracle/ogg_web/certs
+
+cat > /opt/oracle/ogg_web/certs/openssl.cnf <<'EOF'
+[ req ]
+default_bits       = 2048
+distinguished_name = req_distinguished_name
+x509_extensions    = v3_req
+prompt             = no
+default_md         = sha256
+
+[ req_distinguished_name ]
+CN = __HOST__
+
+[ v3_req ]
+subjectAltName = DNS:__HOST__, DNS:localhost, IP:127.0.0.1
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+EOF
+
+# Replace __HOST__ with your FQDN:
+sed -i "s/__HOST__/$(hostname -f)/" /opt/oracle/ogg_web/certs/openssl.cnf
+
+openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 825 \
+  -keyout /opt/oracle/ogg_web/certs/server.key \
+  -out    /opt/oracle/ogg_web/certs/server.crt \
+  -config /opt/oracle/ogg_web/certs/openssl.cnf -extensions v3_req
+
+chmod 600 /opt/oracle/ogg_web/certs/server.key
