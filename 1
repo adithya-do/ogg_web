@@ -1,0 +1,43 @@
+def _ssl_context_from_env():
+    """
+    Returns a Flask ssl_context, or None (HTTP).
+    Env:
+      OGG_SSL_CERT=/path/to/cert.crt
+      OGG_SSL_KEY=/path/to/key.key
+      OGG_SSL_SELF_SIGNED=true|false  (optional; auto-generate if true)
+      OGG_SSL_DIR=/opt/oracle/ogg_web/certs  (where to store self-signed)
+      OGG_BEHIND_PROXY=1  (if running behind nginx/ALB; trusts X-Forwarded-Proto)
+    """
+    cert = os.environ.get("OGG_SSL_CERT")
+    key  = os.environ.get("OGG_SSL_KEY")
+    if cert and key and os.path.exists(cert) and os.path.exists(key):
+        return (cert, key)
+
+    # Optional self-signed generation
+    if str(os.environ.get("OGG_SSL_SELF_SIGNED", "false")).lower() in ("1","true","yes"):
+        base = os.environ.get("OGG_SSL_DIR", "/opt/oracle/ogg_web/certs")
+        os.makedirs(base, exist_ok=True)
+        cert = os.path.join(base, "server.crt")
+        key  = os.path.join(base, "server.key")
+        if not (os.path.exists(cert) and os.path.exists(key)):
+            # create a quick self-signed cert with openssl
+            host = os.uname().nodename
+            try:
+                subprocess.run(
+                    [
+                        "openssl","req","-x509","-nodes","-newkey","rsa:2048",
+                        "-days","825","-subj", f"/CN={host}",
+                        "-keyout", key, "-out", cert
+                    ],
+                    check=True
+                )
+                try:
+                    os.chmod(key, 0o600)
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"* Failed to auto-generate self-signed cert: {e}")
+                return None
+        return (cert, key)
+
+    return None
